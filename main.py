@@ -26,7 +26,11 @@ def run_simulation(
     gradient_gain: float = 1.0,
     use_adaptive: bool = False,
     visualize: bool = True,
-    animate: bool = False
+    animate: bool = False,
+    early_stopping: bool = True,
+    distance_threshold: float = 2.0,
+    stability_window: int = 50,
+    stability_threshold: float = 0.1
 ):
     # Run the simulation.
     print("=" * 60)
@@ -46,6 +50,8 @@ def run_simulation(
     print(f"Initial position: {initial_position}")
     print(f"Number of robots: {num_robots}")
     print(f"Formation radius: {formation_radius}")
+    if early_stopping:
+        print(f"Early stopping: enabled (dist < {distance_threshold}, stability window = {stability_window})")
     
     # Create robot team
     team = RobotTeam(
@@ -91,6 +97,8 @@ def run_simulation(
     
     distances = []
     concentrations = []
+    converged = False
+    final_step = num_steps
     
     for step in range(num_steps):
         gradient, distance = controller.step(field)
@@ -102,6 +110,24 @@ def run_simulation(
         if step % 50 == 0 or step == num_steps - 1:
             print(f"  Step {step:4d}: Distance to source = {distance:.2f}, "
                   f"Concentration = {leader_conc:.2f}")
+        
+        # Early stopping check
+        if early_stopping and step >= stability_window:
+            # Check if distance is below threshold
+            if distance < distance_threshold:
+                # Check stability: variance of last N distances
+                recent_distances = distances[-stability_window:]
+                distance_variance = np.var(recent_distances)
+                
+                if distance_variance < stability_threshold:
+                    converged = True
+                    final_step = step + 1
+                    print(f"\n" + "*" * 60)
+                    print(f"  SUCCESS! Source reached at step {step}  ")
+                    print(f"  Distance: {distance:.3f} (threshold: {distance_threshold})")
+                    print(f"  Stability variance: {distance_variance:.6f} (threshold: {stability_threshold})")
+                    print("*" * 60)
+                    break
     
     # Final results
     final_distance = distances[-1]
@@ -112,6 +138,8 @@ def run_simulation(
     
     print("\n" + "=" * 60)
     print("Results:")
+    print(f"  Converged:                  {'YES' if converged else 'NO (max steps reached)'}")
+    print(f"  Total steps:                {final_step} / {num_steps}")
     print(f"  Initial distance to source: {initial_distance:.2f}")
     print(f"  Final distance to source:   {final_distance:.2f}")
     print(f"  Improvement:                {improvement:.1f}%")
@@ -125,7 +153,9 @@ def run_simulation(
         'field': field,
         'controller': controller,
         'final_distance': final_distance,
-        'improvement': improvement
+        'improvement': improvement,
+        'converged': converged,
+        'final_step': final_step
     }
     
     # Visualization
@@ -302,7 +332,7 @@ def main():
 
     results = run_simulation(
         num_robots=7,          # 1 leader + 6 outer robots (hexagon)
-        num_steps=500,
+        num_steps=5000,
         source_position=(50.0, 50.0),
         initial_position=(10.0, 10.0),
         formation_radius=6.0,  # Larger formation for better gradient estimation
@@ -311,7 +341,12 @@ def main():
         gradient_gain=2.0,     # Gradient following gain
         use_adaptive=True,
         visualize=True,
-        animate=True          # Set to True for animation
+        animate=True,          # Set to True for animation
+        # Early stopping parameters
+        early_stopping=True,
+        distance_threshold=2.0,   # Stop when closer than 2 units to source
+        stability_window=50,      # Check stability over last 50 steps
+        stability_threshold=0.1   # Variance threshold for stability
     )
     
     return results
