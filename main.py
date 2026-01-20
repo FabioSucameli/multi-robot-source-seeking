@@ -24,9 +24,13 @@ def run_simulation(
     sampling_time: float = 0.1,
     formation_gain: float = 2.0,
     gradient_gain: float = 1.0,
+    max_velocity: float = 2.0,
     use_adaptive: bool = False,
     visualize: bool = True,
     animate: bool = False,
+    save_gif: bool = False,
+    gif_filename: str = 'simulation.gif',
+    animation_speed: int = 1,
     early_stopping: bool = True,
     distance_threshold: float = 2.0,
     stability_window: int = 50,
@@ -78,7 +82,8 @@ def run_simulation(
             gradient_estimator=gradient_est,
             sampling_time=sampling_time,
             formation_gain=formation_gain,
-            gradient_gain=gradient_gain
+            gradient_gain=gradient_gain,
+            max_velocity=max_velocity
         )
         print("Using: Adaptive Controller")
     else:
@@ -88,15 +93,18 @@ def run_simulation(
             gradient_estimator=gradient_est,
             sampling_time=sampling_time,
             formation_gain=formation_gain,
-            gradient_gain=gradient_gain
+            gradient_gain=gradient_gain,
+            max_velocity=max_velocity
         )
         print("Using: Standard Controller")
     
     # Run simulation
     print("\nRunning simulation...")
     
+    
     distances = []
     concentrations = []
+    formation_errors = []
     converged = False
     final_step = num_steps
     
@@ -107,9 +115,12 @@ def run_simulation(
         leader_conc = team.get_leader().get_measurement()
         concentrations.append(leader_conc)
         
+        # Get current formation error
+        current_formation_error = controller.formation_error_history[-1]
+        formation_errors.append(current_formation_error)
+        
         if step % 50 == 0 or step == num_steps - 1:
-            print(f"  Step {step:4d}: Distance to source = {distance:.2f}, "
-                  f"Concentration = {leader_conc:.2f}")
+            print(f"  Step: {step:5d},  Distance to source: {distance:6.2f},  Formation Error: {current_formation_error:7.4f},  Concentration: {leader_conc:5.2f}")
         
         # Early stopping check
         if early_stopping and step >= stability_window:
@@ -131,6 +142,9 @@ def run_simulation(
     
     # Final results
     final_distance = distances[-1]
+    final_formation_error = formation_errors[-1]
+    avg_formation_error = np.mean(formation_errors)
+    max_formation_error = np.max(formation_errors)
     initial_distance = np.linalg.norm(
         np.array(initial_position) - np.array(source_position)
     )
@@ -144,6 +158,9 @@ def run_simulation(
     print(f"  Final distance to source:   {final_distance:.2f}")
     print(f"  Improvement:                {improvement:.1f}%")
     print(f"  Final concentration:        {concentrations[-1]:.2f}")
+    print(f"  Final formation error:      {final_formation_error:.4f}")
+    print(f"  Average formation error:    {avg_formation_error:.4f}")
+    print(f"  Max formation error:        {max_formation_error:.4f}")
     print("=" * 60)
     
     results = {
@@ -162,8 +179,8 @@ def run_simulation(
     if visualize:
         visualize_results(results, source_position, initial_position)
     
-    if animate:
-        create_animation(results, source_position)
+    if animate or save_gif:
+        create_animation(results, source_position, save_gif=save_gif, gif_filename=gif_filename, animation_speed=animation_speed)
     
     return results
 
@@ -259,12 +276,17 @@ def visualize_results(results: dict, source_pos: tuple, initial_pos: tuple):
     plt.show()
 
 # Create an animation of the simulation.
-def create_animation(results: dict, source_pos: tuple):
+def create_animation(results: dict, source_pos: tuple, save_gif: bool = False, gif_filename: str = 'simulation.gif', animation_speed: int = 1):
+    
+    # animation_speed: Multiplier for animation speed (1 = normal, 2 = 2x faster, etc.)
+    # Higher values skip more frames, making the animation faster visually.
     
     fig, ax = plt.subplots(figsize=(10, 10))
     
     team = results['team']
     field = results['field']
+    final_step = results.get('final_step', len(results['distances']))
+    converged = results.get('converged', False)
     
     # Create concentration field heatmap
     x_range = np.linspace(-10, 70, 80)
@@ -281,7 +303,16 @@ def create_animation(results: dict, source_pos: tuple):
     
     # Get all trajectory data
     all_histories = [np.array(robot.position_history) for robot in team.robots]
-    num_frames = len(all_histories[0])
+    
+    # Use final_step as the number of frames (stops at convergence)
+    total_steps = min(final_step, len(all_histories[0]))
+    
+    # Apply animation_speed: select every Nth frame
+    frame_indices = list(range(0, total_steps, animation_speed))
+    # Always include the last frame
+    if frame_indices[-1] != total_steps - 1:
+        frame_indices.append(total_steps - 1)
+    num_frames = len(frame_indices)
     
     # Initialize plot elements
     scatter_leader = ax.scatter([], [], c='blue', s=200, marker='*', 
@@ -289,6 +320,9 @@ def create_animation(results: dict, source_pos: tuple):
     scatter_followers = ax.scatter([], [], c='cyan', s=100, marker='o',
                                   edgecolors='white', linewidth=1, zorder=7)
     trajectory_line, = ax.plot([], [], 'b-', linewidth=2, alpha=0.7, zorder=5)
+    status_text = ax.text(0.02, 0.98, '', transform=ax.transAxes, fontsize=12,
+                         verticalalignment='top', fontweight='bold',
+                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     
     ax.set_xlim(-10, 70)
     ax.set_ylim(-10, 70)
@@ -302,51 +336,77 @@ def create_animation(results: dict, source_pos: tuple):
         scatter_leader.set_offsets(np.empty((0, 2)))
         scatter_followers.set_offsets(np.empty((0, 2)))
         trajectory_line.set_data([], [])
-        return scatter_leader, scatter_followers, trajectory_line
+        status_text.set_text('')
+        return scatter_leader, scatter_followers, trajectory_line, status_text
     
-    def update(frame):
+    def update(frame_idx):
+        # Get actual step index from frame_indices
+        actual_step = frame_indices[frame_idx]
+        
         # Leader position
-        leader_pos = all_histories[0][frame:frame+1]
+        leader_pos = all_histories[0][actual_step:actual_step+1]
         scatter_leader.set_offsets(leader_pos)
         
         # Follower positions
-        follower_pos = np.array([h[frame] for h in all_histories[1:]])
+        follower_pos = np.array([h[actual_step] for h in all_histories[1:]])
         scatter_followers.set_offsets(follower_pos)
         
         # Leader trajectory
-        traj = all_histories[0][:frame+1]
+        traj = all_histories[0][:actual_step+1]
         trajectory_line.set_data(traj[:, 0], traj[:, 1])
         
-        ax.set_title(f'Multi-Robot Source Seeking (Step {frame})')
+        # Update title and status
+        if frame_idx == num_frames - 1 and converged:
+            ax.set_title(f'Multi-Robot Source Seeking (Step {actual_step}) - CONVERGED!')
+            status_text.set_text(f'Source reached!\nDistance: {results["final_distance"]:.2f}')
+            status_text.set_color('green')
+        else:
+            ax.set_title(f'Multi-Robot Source Seeking (Step {actual_step})')
+            dist = results['distances'][actual_step] if actual_step < len(results['distances']) else results['final_distance']
+            status_text.set_text(f'Distance: {dist:.2f}')
+            status_text.set_color('black')
         
-        return scatter_leader, scatter_followers, trajectory_line
+        return scatter_leader, scatter_followers, trajectory_line, status_text
     
     anim = FuncAnimation(fig, update, init_func=init, frames=num_frames,
-                        interval=50, blit=True)
+                        interval=30, blit=True)  # Reduced interval for smoother playback
     
-    plt.show()
-    print("\nAnimation displayed.")
+    if save_gif:
+        print(f"\nSaving animation to '{gif_filename}'...")
+        # Use pillow writer for GIF
+        anim.save(gif_filename, writer='pillow', fps=20)
+        print(f"Animation saved to '{gif_filename}' ({num_frames} frames)")
+        if converged:
+            print(f"GIF stops at convergence (step {final_step})")
+    else:
+        plt.show()
+        print("\nAnimation displayed.")
+    
+    plt.close(fig)
 
 
 def main():
 
     results = run_simulation(
         num_robots=7,          # 1 leader + 6 outer robots (hexagon)
-        num_steps=5000,
+        num_steps=15000,
         source_position=(50.0, 50.0),
         initial_position=(10.0, 10.0),
         formation_radius=6.0,  # Larger formation for better gradient estimation
         sampling_time=0.2,     # Time step
         formation_gain=1.5,    # Formation control gain
-        gradient_gain=2.0,     # Gradient following gain
+        gradient_gain=1.0,     # Gradient following gain
+        max_velocity=0.5,     # Max velocity (higher limit)
         use_adaptive=True,
         visualize=True,
         animate=True,          # Set to True for animation
-        # Early stopping parameters
-        early_stopping=True,
-        distance_threshold=2.0,   # Stop when closer than 2 units to source
-        stability_window=50,      # Check stability over last 50 steps
-        stability_threshold=0.1   # Variance threshold for stability
+        save_gif=False,        # Set to True to save animation as GIF
+        gif_filename='simulation.gif',  # Output filename for GIF
+        animation_speed=3,     # Animation speed multiplier (1=normal, 3=3x faster)
+        early_stopping=True,      # Early stopping parameters
+        distance_threshold=2.0,   # Stop when closer than N units to source
+        stability_window=100,      # Check stability over last N steps
+        stability_threshold=0.05   # Variance threshold for stability
     )
     
     return results
