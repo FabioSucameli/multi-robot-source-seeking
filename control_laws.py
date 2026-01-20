@@ -58,12 +58,13 @@ class SourceSeekingController:
         conc_gradient = self.gradient_estimator.estimate_gradient(positions, measurements)
         self.gradient_history.append(conc_gradient.copy())
         
-        # Normalize gradient direction for consistent motion toward source
-        grad_norm = np.linalg.norm(conc_gradient)
-        if grad_norm > 1e-8:
-            conc_gradient_normalized = conc_gradient / grad_norm
-        else:
-            conc_gradient_normalized = np.zeros(2)
+        
+        # Normalize gradient direction (for logging purposes)
+        #grad_norm = np.linalg.norm(conc_gradient)
+        #if grad_norm > 1e-8:
+        #   conc_gradient_normalized = conc_gradient / grad_norm
+        #else:
+        #   conc_gradient_normalized = np.zeros(2)
         
         # Log formation error
         formation_error = self.formation_controller.get_formation_error(positions)
@@ -77,8 +78,9 @@ class SourceSeekingController:
             formation_term = -self.K_for * formation_gradients[i]
             
             if robot.is_leader:
-                # Leader also follows concentration gradient (using normalized direction)
-                gradient_term = self.K_grad * conc_gradient_normalized
+                # Leader also follows concentration gradient
+                #gradient_term = self.K_grad * conc_gradient_normalized
+                gradient_term = self.K_grad * conc_gradient
                 velocity = formation_term + gradient_term
             else:
                 # Non-leader: only formation control
