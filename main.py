@@ -32,9 +32,9 @@ def run_simulation(
     gif_filename: str = 'simulation.gif',
     animation_speed: int = 1,
     early_stopping: bool = True,
-    distance_threshold: float = 2.0,
-    stability_window: int = 50,
-    stability_threshold: float = 0.1
+    concentration_threshold: float = 90.0,
+    gradient_norm_threshold: float = 0.5,
+    stability_window: int = 30
 ):
     # Run the simulation.
     print("=" * 60)
@@ -50,12 +50,12 @@ def run_simulation(
         amplitude=100.0
     )
     
-    print(f"\nSource position: {source_position}")
+    print(f"\nSource position: {source_position} ")
     print(f"Initial position: {initial_position}")
     print(f"Number of robots: {num_robots}")
     print(f"Formation radius: {formation_radius}")
     if early_stopping:
-        print(f"Early stopping: enabled (dist < {distance_threshold}, stability window = {stability_window})")
+        print(f"Early stopping: enabled (conc > {concentration_threshold}, |grad| < {gradient_norm_threshold}, window = {stability_window})")
     
     # Create robot team
     team = RobotTeam(
@@ -72,7 +72,7 @@ def run_simulation(
     )
     
     # Create gradient estimator
-    gradient_est = WeightedGradientEstimator(regularization=1e-4)
+    gradient_est = GradientEstimator()
     
     # Create main controller
     if use_adaptive:
@@ -104,6 +104,7 @@ def run_simulation(
     
     distances = []
     concentrations = []
+    gradient_norms = []
     formation_errors = []
     converged = False
     final_step = num_steps
@@ -115,6 +116,9 @@ def run_simulation(
         leader_conc = team.get_leader().get_measurement()
         concentrations.append(leader_conc)
         
+        gradient_norm = np.linalg.norm(gradient)
+        gradient_norms.append(gradient_norm)
+        
         # Get current formation error
         current_formation_error = controller.formation_error_history[-1]
         formation_errors.append(current_formation_error)
@@ -122,23 +126,29 @@ def run_simulation(
         if step % 50 == 0 or step == num_steps - 1:
             print(f"  Step: {step:5d},  Distance to source: {distance:6.2f},  Formation Error: {current_formation_error:7.4f},  Concentration: {leader_conc:5.2f}")
         
-        # Early stopping check
+        # Early stopping check based on observable quantities
+        # High concentration (close to maximum)
+        # Small gradient norm (at/near peak)
+        # Stability over recent window
         if early_stopping and step >= stability_window:
-            # Check if distance is below threshold
-            if distance < distance_threshold:
-                # Check stability: variance of last N distances
-                recent_distances = distances[-stability_window:]
-                distance_variance = np.var(recent_distances)
-                
-                if distance_variance < stability_threshold:
-                    converged = True
-                    final_step = step + 1
-                    print(f"\n" + "*" * 60)
-                    print(f"  SUCCESS! Source reached at step {step}  ")
-                    print(f"  Distance: {distance:.3f} (threshold: {distance_threshold})")
-                    print(f"  Stability variance: {distance_variance:.6f} (threshold: {stability_threshold})")
-                    print("*" * 60)
-                    break
+            recent_concentrations = concentrations[-stability_window:]
+            recent_gradient_norms = gradient_norms[-stability_window:]
+            
+            avg_concentration = np.mean(recent_concentrations)
+            avg_gradient_norm = np.mean(recent_gradient_norms)
+            concentration_stable = np.std(recent_concentrations) < 1.0  # Low variance
+            
+            if (avg_concentration > concentration_threshold and 
+                avg_gradient_norm < gradient_norm_threshold and
+                concentration_stable):
+                converged = True
+                final_step = step + 1
+                print(f"\n" + "*" * 60)
+                print(f"  SUCCESS! Source reached at step {step}  ")
+                print(f"  Avg Concentration: {avg_concentration:.3f} (threshold: {concentration_threshold})")
+                print(f"  Avg |Gradient|: {avg_gradient_norm:.6f} (threshold: {gradient_norm_threshold})")
+                print("*" * 60)
+                break
     
     # Final results
     final_distance = distances[-1]
@@ -402,11 +412,11 @@ def main():
         animate=True,          # Set to True for animation
         save_gif=False,        # Set to True to save animation as GIF
         gif_filename='simulation.gif',  # Output filename for GIF
-        animation_speed=3,     # Animation speed multiplier (1=normal, 3=3x faster)
-        early_stopping=True,      # Early stopping parameters
-        distance_threshold=2.0,   # Stop when closer than N units to source
-        stability_window=100,      # Check stability over last N steps
-        stability_threshold=0.05   # Variance threshold for stability
+        animation_speed=50,     # Animation speed multiplier (1=normal, 3=3x faster)
+        early_stopping=True,
+        concentration_threshold=99.0,  # High concentration indicates near source
+        gradient_norm_threshold=0.1,   # Small gradient indicates at peak
+        stability_window=100            # Check stability over last N steps
     )
     
     return results
