@@ -396,11 +396,25 @@ def create_animation(results: dict, source_pos: tuple, save_gif: bool = False, g
 
 
 def main():
+    
+    # Select source position zone
+    zone = 'default'
+    
+    zone_config = {
+        'default':      (50.0, 50.0),
+        'upper_right':  (np.random.uniform(50, 60), np.random.uniform(50, 60)),
+        'upper_left':   (np.random.uniform(10, 20), np.random.uniform(50, 60)),
+        'lower_right':  (np.random.uniform(50, 60), np.random.uniform(10, 20)),
+        'lower_left':   (np.random.uniform(10, 20), np.random.uniform(10, 20)),
+        'random':       tuple(np.random.uniform(10, 60, size=2))
+    }
+    
+    source_pos = zone_config[zone]
 
     results = run_simulation(
         num_robots=7,          # 1 leader + 6 outer robots (hexagon)
         num_steps=15000,
-        source_position=(50.0, 50.0),
+        source_position=source_pos,
         initial_position=(10.0, 10.0),
         formation_radius=6.0,  # Larger formation for better gradient estimation
         sampling_time=0.2,     # Time step
