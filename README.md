@@ -133,11 +133,7 @@ $$M \hat{g} = v$$
 
 where:
 - $M \in \mathbb{R}^{(N-1) \times 2}$ is the **position difference matrix**:
-  $$M = \begin{bmatrix} (p_1 - p_0)^\top \\ (p_2 - p_0)^\top \\ \vdots \\ (p_{N-1} - p_0)^\top \end{bmatrix}$$
-
-- $v \in \mathbb{R}^{N-1}$ is the **concentration difference vector**:
-  $$v = \begin{bmatrix} c(p_1) - c(p_0) \\ c(p_2) - c(p_0) \\ \vdots \\ c(p_{N-1}) - c(p_0) \end{bmatrix}$$
-
+- $v \in \mathbb{R}^{N-1}$ is the **concentration difference vector**
 - $\hat{g} \in \mathbb{R}^2$ is the **estimated gradient**
 
 The least squares solution is:
