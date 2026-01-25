@@ -20,6 +20,9 @@ multi-robot-source-seeking/
 ├── main.py                  # Main simulation script
 ├── requirements.txt         # Python dependencies
 └── README.md                # This file
+├── results/
+│   ├── simulation_results.png
+│   └── simulation.gif
 ```
 
 ---
@@ -245,7 +248,7 @@ These results indicate successful localization of the source while preserving th
 
 If enabled, the simulation can generate an animation illustrating the real-time behavior of the robot team during source seeking.
 
-![Simulation Animation](simulation.gif)
+![Simulation Animation](results/simulation.gif)
 
 The animation shows:
 - the **leader robot** moving toward increasing concentration regions,
@@ -255,14 +258,14 @@ The animation shows:
 
 ### Performance Graphs
 
-![Simulation Results](simulation_results.png)
+![Simulation Results](results/simulation_results.png)
 
 #### Graph Analysis
 
 The figure summarizes the system behavior over time:
 
 1. **Distance to Source**  
-   The distance decreases monotonically, with slow progress in low-gradient regions and rapid convergence near the source. This behavior is typical of gradient-based navigation methods.
+   The distance decreases monotonically, with slow progress in low-gradient regions and rapid convergence near the source.
 
 2. **Concentration at Formation Center**  
    The measured concentration increases steadily as the robots approach the source, reaching the maximum value at convergence.
