@@ -126,8 +126,8 @@ class SourceSeekingController:
         }
 
 # Adaptive controller that adjusts gains based on situation.
-# - Increases gradient gain when close to source
-# - Decreases formation gain when gradient is strong
+# Increases gradient gain when close to source
+
 class AdaptiveController(SourceSeekingController):
     
     def __init__(self, *args, 
@@ -156,3 +156,4 @@ class AdaptiveController(SourceSeekingController):
         )
         
         return super().compute_control(positions, measurements)
+
