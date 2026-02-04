@@ -19,7 +19,6 @@ class Robot:
         self.position = np.array(initial_position, dtype=float)
         self.is_leader = is_leader
         self.last_measurement = 0.0
-        self.velocity = np.zeros(2)
         
         # History for visualization
         self.position_history = [self.position.copy()]
@@ -33,7 +32,6 @@ class Robot:
     # Update robot position
     def update_position(self, new_position: np.ndarray):
         
-        self.velocity = new_position - self.position
         self.position = np.array(new_position, dtype=float)
         self.position_history.append(self.position.copy())
     
@@ -113,30 +111,3 @@ class RobotTeam:
         # Return the leader robot
         return self.robots[0]
     
-    def get_formation_center(self) -> np.ndarray:
-        # Return the centroid of the formation
-        positions = self.get_all_positions()
-        return np.mean(positions, axis=0)
-    
-    # Get desired distances between connected robots
-    def get_desired_distances(self) -> dict:
-        distances = {}
-        n = self.num_robots
-        
-        # Distance from leader to outer robots
-        for i in range(1, n):
-            distances[(0, i)] = self.formation_radius
-            distances[(i, 0)] = self.formation_radius
-        
-        # Distance between adjacent outer robots
-        num_outer = n - 1
-        if num_outer > 1:
-            # Side length of regular polygon
-            side_length = 2 * self.formation_radius * np.sin(np.pi / num_outer)
-            for i in range(1, n):
-                prev = ((i - 2) % num_outer) + 1
-                next_idx = (i % num_outer) + 1
-                distances[(i, prev)] = side_length
-                distances[(i, next_idx)] = side_length
-        
-        return distances
