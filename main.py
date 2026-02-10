@@ -34,8 +34,16 @@ def run_simulation(
     early_stopping: bool = True,
     concentration_threshold: float = 90.0,
     gradient_norm_threshold: float = 0.5,
-    stability_window: int = 30
+    stability_window: int = 30,
+    # New noise parameters for realistic simulation
+    formation_noise_std: float = 0.0,  # Initial formation disturbance (position noise)
+    measurement_noise_std: float = 0.0,  # Gaussian measurement noise on concentration
+    random_seed: int = None  # For reproducible results
 ):
+    # Set random seed for reproducibility
+    if random_seed is not None:
+        np.random.seed(random_seed)
+    
     # Run the simulation.
     print("=" * 60)
     print("Multi-Robot Source Seeking Simulation")
@@ -54,6 +62,9 @@ def run_simulation(
     print(f"Initial position: {initial_position}")
     print(f"Number of robots: {num_robots}")
     print(f"Formation radius: {formation_radius}")
+    if formation_noise_std > 0 or measurement_noise_std > 0:
+        print(f"Formation noise (std): {formation_noise_std}")
+        print(f"Measurement noise (std): {measurement_noise_std}")
     if early_stopping:
         print(f"Early stopping: enabled (conc > {concentration_threshold}, |grad| < {gradient_norm_threshold}, window = {stability_window})")
     
@@ -61,7 +72,9 @@ def run_simulation(
     team = RobotTeam(
         num_robots=num_robots,
         initial_center=np.array(initial_position),
-        formation_radius=formation_radius
+        formation_radius=formation_radius,
+        formation_noise_std=formation_noise_std,
+        measurement_noise_std=measurement_noise_std
     )
     
     # Create formation controller
@@ -182,7 +195,11 @@ def run_simulation(
         'final_distance': final_distance,
         'improvement': improvement,
         'converged': converged,
-        'final_step': final_step
+        'final_step': final_step,
+        'formation_noise_std': formation_noise_std,
+        'measurement_noise_std': measurement_noise_std,
+        'gradient_norms': np.array(gradient_norms),
+        'formation_errors': np.array(formation_errors)
     }
     
     # Visualization
@@ -410,30 +427,65 @@ def main():
     }
     
     source_pos = zone_config[zone]
-
-    results = run_simulation(
-        num_robots=7,          # 1 leader + 6 outer robots (hexagon)
-        num_steps=15000,
-        source_position=source_pos,
-        initial_position=(10.0, 10.0),
-        formation_radius=6.0,  # Larger formation for better gradient estimation
-        sampling_time=0.2,     # Time step
-        formation_gain=1.5,    # Formation control gain
-        gradient_gain=1.0,     # Gradient following gain
-        max_velocity=0.5,     # Max velocity (higher limit)
-        use_adaptive=True,
-        visualize=True,
-        animate=True,          # Set to True for animation
-        save_gif=False,        # Set to True to save animation as GIF
-        gif_filename='simulation.gif',  # Output filename for GIF
-        animation_speed=50,     # Animation speed multiplier (1=normal, 3=3x faster)
-        early_stopping=True,
-        concentration_threshold=99.0,  # High concentration indicates near source
-        gradient_norm_threshold=0.1,   # Small gradient indicates at peak
-        stability_window=100            # Check stability over last N steps
-    )
     
-    return results
+    # Choose simulation mode: ideal or 'realistic' (with noise)
+    mode = 'realistic'
+    
+    if mode == 'realistic':
+        # Realistic simulation with noise
+        results = run_simulation(
+            num_robots=7,
+            num_steps=15000,
+            source_position=source_pos,
+            initial_position=(10.0, 10.0),
+            formation_radius=6.0,
+            sampling_time=0.2,
+            formation_gain=1.5,
+            gradient_gain=1.0,
+            max_velocity=0.5,
+            use_adaptive=True,
+            visualize=True,
+            animate=True,
+            save_gif=False,
+            gif_filename='simulation_realistic.gif',
+            animation_speed=50,
+            early_stopping=True,
+            concentration_threshold=95.0,
+            gradient_norm_threshold=0.5,
+            stability_window=10,
+            # Add disturbances
+            formation_noise_std=1.5,
+            measurement_noise_std=3.0,
+            random_seed=42
+        )
+        return results
+    
+    else:  # mode == 'ideal'
+        results = run_simulation(
+            num_robots=7, # Total robots (including leader)
+            num_steps=15000, # Max time steps to run
+            source_position=source_pos, # Source location in the field
+            initial_position=(10.0, 10.0), # Initial position of the leader robot
+            formation_radius=6.0, # Larger formation for better gradient estimation
+            sampling_time=0.2, # Time step
+            formation_gain=1.5, # Formation control gain
+            gradient_gain=1.0, # Gradient following gain
+            max_velocity=0.5, # Max velocity (higher limit)
+            use_adaptive=True, # Use adaptive controller for better convergence
+            visualize=True, # Show final results plots
+            animate=True, # Create animation of the simulation
+            save_gif=False, # Save animation as GIF file
+            gif_filename='simulation.gif', # Output filename for GIF
+            animation_speed=50, # Animation speed multiplier (1=normal, >1=faster)
+            early_stopping=True, # Enable early stopping based on convergence criteria
+            concentration_threshold=99.0, # High concentration indicates near source
+            gradient_norm_threshold=0.1, # Small gradient indicates at peak
+            stability_window=100, # Check stability over last N steps
+            formation_noise_std=0.0, # Standard deviation of formation noise
+            measurement_noise_std=0.0, # Standard deviation of measurement noise
+            random_seed=42 # Random seed for reproducibility
+        )
+        return results
 
 
 if __name__ == "__main__":
