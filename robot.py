@@ -13,20 +13,29 @@ class Robot:
     # robot_id: Unique identifier for the robot
     # initial_position: Starting position [x, y]
     # is_leader: Whether this robot is the formation leader
-    def __init__(self, robot_id: int, initial_position: np.ndarray, is_leader: bool = False):
+    # measurement_noise_std: Standard deviation of Gaussian measurement noise
+    def __init__(self, robot_id: int, initial_position: np.ndarray, is_leader: bool = False,
+                 measurement_noise_std: float = 0.0):
         
         self.id = robot_id
         self.position = np.array(initial_position, dtype=float)
         self.is_leader = is_leader
         self.last_measurement = 0.0
+        self.measurement_noise_std = measurement_noise_std
         
         # History for visualization
         self.position_history = [self.position.copy()]
     
-    # Measure concentration at current position
+    # Measure concentration at current position (with optional Gaussian noise)
     def measure_concentration(self, field: ConcentrationField) -> float:
         
-        self.last_measurement = field.get_concentration(self.position)
+        true_concentration = field.get_concentration(self.position)
+        # Add Gaussian measurement noise
+        if self.measurement_noise_std > 0:
+            noise = np.random.normal(0, self.measurement_noise_std)
+            self.last_measurement = max(0.0, true_concentration + noise)  # Concentration >= 0
+        else:
+            self.last_measurement = true_concentration
         return self.last_measurement
     
     # Update robot position
@@ -50,23 +59,37 @@ class RobotTeam:
     # num_robots: Total number of robots (including leader)
     # initial_center: Initial position of the leader
     # formation_radius: Distance from leader to outer robots
+    # formation_noise_std: Standard deviation of initial position perturbation
+    # measurement_noise_std: Standard deviation of Gaussian measurement noise
     def __init__(self, num_robots: int, initial_center: np.ndarray, 
-                 formation_radius: float = 5.0):
+                 formation_radius: float = 5.0,
+                 formation_noise_std: float = 0.0,
+                 measurement_noise_std: float = 0.0):
         self.num_robots = num_robots
         self.formation_radius = formation_radius
+        self.formation_noise_std = formation_noise_std
+        self.measurement_noise_std = measurement_noise_std
         self.robots: List[Robot] = []
         
-        # Create leader robot at center
-        leader = Robot(0, initial_center, is_leader=True)
+        # Create leader robot at center (with optional position noise)
+        leader_position = initial_center.copy()
+        if formation_noise_std > 0:
+            leader_position += np.random.normal(0, formation_noise_std, 2)
+        leader = Robot(0, leader_position, is_leader=True, 
+                      measurement_noise_std=measurement_noise_std)
         self.robots.append(leader)
         
-        # Create outer robots in a regular polygon
+        # Create outer robots in a regular polygon (with optional position noise)
         num_outer = num_robots - 1
         for i in range(num_outer):
             angle = 2 * np.pi * i / num_outer
             offset = formation_radius * np.array([np.cos(angle), np.sin(angle)])
             position = initial_center + offset
-            robot = Robot(i + 1, position, is_leader=False)
+            # Add formation noise (initial disturbance)
+            if formation_noise_std > 0:
+                position += np.random.normal(0, formation_noise_std, 2)
+            robot = Robot(i + 1, position, is_leader=False,
+                         measurement_noise_std=measurement_noise_std)
             self.robots.append(robot)
         
         # Build adjacency graph
