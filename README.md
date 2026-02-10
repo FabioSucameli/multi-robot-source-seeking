@@ -279,3 +279,106 @@ The figure summarizes the system behavior over time:
 - **Two-phase behavior**: an initial slow exploration phase followed by rapid convergence near the source.
 - **Formation–gradient trade-off**: aggressive gradient following temporarily affects formation accuracy, which is quickly restored.
 - **Successful convergence**: the robot team reliably reaches the source.
+
+
+---
+
+## Realistic Simulation with Disturbances
+
+To evaluate the robustness of the source seeking algorithm under more realistic conditions, the simulation has been extended to include:
+
+1. **Initial Formation Disturbance**: Gaussian noise applied to the initial positions of all robots
+2. **Measurement Noise**: Gaussian noise added to concentration sensor readings
+
+
+
+### Simulation Modes
+
+The `main()` function supports two modes:
+
+- **`'ideal'`** : No disturbances, strict convergence criteria
+- **`'realistic'`**: With formation and measurement noise, relaxed criteria
+
+### Relaxed Convergence Criteria
+
+Due to the stochastic nature of measurements in the realistic scenario, the early stopping criteria had to be relaxed:
+
+| Parameter | Ideal | Realistic |
+|-----------|-------|-----------|
+| `concentration_threshold` | 99.0 | **95.0** |
+| `gradient_norm_threshold` | 0.1 | **0.5** |
+| `stability_window` | 100 | **10** |
+
+**Rationale**:
+- **Lower concentration threshold**: Measurement noise causes the observed concentration to fluctuate around the true value, making it harder to consistently exceed 99%
+- **Higher gradient threshold**: Noisy measurements produce noisier gradient estimates, requiring a more tolerant threshold
+- **Smaller stability window**: Sustained stability is harder to achieve with noise; a shorter window allows convergence detection while still filtering transient spikes
+
+### Realistic Simulation Results
+
+#### Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| Source position | (50.0, 50.0) |
+| Initial position | (10.0, 10.0) |
+| Number of robots | 7 |
+| Formation radius | 6.0 |
+| **Formation noise (σ)** | **1.5** |
+| **Measurement noise (σ)** | **3.0** |
+| Controller | Adaptive Controller |
+
+#### Results Summary
+
+| Metric | Value |
+|--------|-------|
+| **Converged** | YES |
+| **Total steps** | 12,285 / 15,000 |
+| **Initial distance to source** | 56.57 |
+| **Final distance to source** | 0.07 |
+| **Improvement** | 99.9% |
+| **Final concentration** | 99.00 |
+| **Final formation error** | 0.0313 |
+| **Average formation error** | 0.0488 |
+| **Max formation error** | 2.0472 |
+
+#### Key Observations
+
+1. **Initial Formation Error Spike**: At step 0, the formation error is **2.05** (compared to 0.0 in ideal case) due to the initial position perturbation. The formation controller quickly recovers this within ~50 steps.
+
+2. **Noisy Concentration Readings**: The measured concentration fluctuates significantly (sometimes showing 0.0 when the true value is ~0.05), demonstrating the effect of the Gaussian noise (σ=3.0).
+
+3. **Slower Convergence**: The algorithm requires **12,285 steps** to converge (vs. 5,415 in ideal case) due to:
+   - Noisier gradient estimates causing less consistent direction
+   - Occasional "wrong" steps due to measurement errors
+
+4. **Successful Source Localization**: Despite the disturbances, the algorithm still achieves **99.9% improvement** with a final distance of only **0.07** from the source.
+
+### Realistic Simulation Animation
+
+![Realistic Simulation Animation](results/simulation_realistic.gif)
+
+The animation shows the more erratic trajectory caused by noisy gradient estimates, while still successfully converging to the source.
+
+### Realistic Performance Graphs
+
+![Realistic Simulation Results](results/simulation_realistic_results.png)
+
+#### Graph Analysis (Realistic Case)
+
+1. **Distance to Source**: Shows a slower, more irregular descent compared to the ideal case, with occasional small increases due to incorrect gradient estimates.
+
+2. **Concentration at Leader**: Exhibits significant noise, with readings fluctuating widely. Values occasionally exceed 100 (due to positive noise) or drop to 0 (when noise overwhelms the true signal at low concentrations).
+
+3. **Formation Error**: The initial spike at step 0 (≈2.05) shows the effect of formation noise. After recovery, the error remains slightly higher than the ideal case (avg 0.0488 vs 0.041) but within acceptable bounds.
+
+### Comparison: Ideal vs Realistic
+
+| Metric | Ideal | Realistic | Difference |
+|--------|-------|-----------|------------|
+| Convergence steps | 5,415 | 12,285 | +127% |
+| Final distance | 0.07 | 0.07 | Same |
+| Avg formation error | 0.041 | 0.049 | +20% |
+| Max formation error | 0.40 | 2.05 | +413% |
+
+**Conclusion**: The algorithm demonstrates robustness to realistic disturbances, successfully localizing the source despite noisy sensors and imperfect initial formation. The main trade-off is increased convergence time.
